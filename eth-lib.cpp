@@ -54,6 +54,8 @@ listener_t::listener_t(unsigned short port) :
         std::cerr << "listen() error." << std::endl;
         exit(-4);
     }
+
+    m_sockfds.emplace_back(m_sockfd, POLLIN, 0);
 }
 
 listener_t::~listener_t() {

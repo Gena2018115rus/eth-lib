@@ -123,7 +123,7 @@ class listener_t {
     int m_sockfd;
     static inline const int INT_ONE = 1;
 //    std::mutex sockfds_mtx;
-    std::vector<pollfd> m_sockfds{{m_sockfd, POLLIN, 0}};
+    std::vector<pollfd> m_sockfds;
     std::map<int, client_addr_t> m_client_addrs; // client_addrs[fd].len is unused?     sorted_map избыточен?
     std::unordered_map<int, std::string> m_client_in_bufs;
     bool m_must_break;
