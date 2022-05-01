@@ -11,8 +11,9 @@
 #include <unordered_map>
 #include <string>
 #include <iostream>
+#include <regex>
 
-class client_ref_t;
+class listener_t;
 
 struct client_addr_t
 {
@@ -20,14 +21,27 @@ struct client_addr_t
     socklen_t len;
 };
 
+class client_ref_t {
+  public:
+    client_ref_t(listener_t &listener, int sockfd);
+    bool write(std::string buf);
+    const std::string &input_buf();
+    void disconnect();
+    std::string addr();
+
+  private:
+    listener_t &m_listener;
+    int m_sockfd;
+};
+
 class listener_t {
   public:
     listener_t(unsigned short port);
     
-    // onNewClient_t = void(client_ref_t client);
-    // onNewData_t   = void(client_ref_t client);
-    template <typename onNewClient_t, typename onNewData_t>
-    void run(onNewClient_t onNewClient, onNewData_t onNewData) {
+    // onNewClient_t  = void(client_ref_t client);
+    // onNewMessage_t = void(std::string addr, std::string msg);
+    template <typename onNewClient_t, typename onNewMessage_t>
+    void run(onNewClient_t onNewClient, onNewMessage_t onNewMessage) {
         for (;;)
         {
             for (auto& sockfd : m_sockfds) sockfd.revents = 0; // need?
@@ -61,7 +75,9 @@ class listener_t {
                     m_client_addrs[client_sockfd] = {client_addr, client_addr_len};
     //                    send_to_all(addr_in_2str((struct sockaddr_in *)&client_addr) + " connected!");
 
-                    onNewClient(client_ref_t(*this, client_sockfd));
+                    client_ref_t c(*this, client_sockfd);
+                    c.write("HTTP/1.1 200 OK\r\n\r\n");
+                    onNewClient(std::move(c));
 
                     m_sockfds.push_back({client_sockfd, POLLIN, 0}); // надо будет наверное операции с sockfds защитить мьютексами
     //                    close(client_sockfd);
@@ -99,9 +115,35 @@ class listener_t {
                                 // std::cerr << "уже считано " << std::regex_replace(client_in_bufs[client_fd], std::regex{"[^]*?\r\n\r\n"}, "", std::regex_constants::format_first_only).size() << std::endl;
                             }
                             errno = 0;
+//----------------------------------------------------------------------------
+                            std::string input_buf = m_client_in_bufs[client_fd];
+                            std::smatch splitted;
+                            if (regex_match(input_buf, splitted, std::regex{"([^]*?\r\n)\r\n([^]*)"})) { // мб сильно сэкономит память если я буду не .str(2) делать, а только 1 захвал и .suffix()
+                                auto headers = splitted.str(1);
+                                std::smatch m;
+                                if (regex_search(headers, m, std::regex{"Content-Length: (\\d+)\r\n"})
+                                    && splitted.str(2).size() >= std::stoull(m[1])) {
+                                    client_ref_t client(*this, client_fd);
+                                    auto addr = client.addr();
+                                    client.disconnect();
 
-                            onNewData(client_ref_t(*this, client_fd));
-                    
+                                    // auto s = client_in_bufs[client_fd];
+                                    // auto index = s.find("\r\n");
+                                    // bool flag = false;
+                                    // if (index != (size_t)-1) {
+                                    //     s = {s.begin(), s.begin() + index};
+                                    //     flag = s == "POST /message";
+                                    // }
+
+                                    // if (flag) {
+                                    if (input_buf.starts_with("POST /message")) { // clang on androin fails here and version above doesn't work on desktop?
+                                        onNewMessage(addr, std::regex_replace(input_buf, std::regex{"[^]*?\r\n\r\n"}, "", std::regex_constants::format_first_only));
+                                    } else {
+                                        std::clog << input_buf << std::endl;
+                                    }
+                                }
+                            }
+//----------------------------------------------------------------------------
                             if (m_must_break) {
                                 goto break_2;
                             }
@@ -131,19 +173,6 @@ class listener_t {
     friend client_ref_t;
     
     void disconnect(int client_fd);
-};
-
-class client_ref_t {
-  public:
-    client_ref_t(listener_t &listener, int sockfd);
-    bool write(std::string buf);
-    const std::string &input_buf();
-    void disconnect();
-    std::string addr();
-    
-  private:
-    listener_t &m_listener;
-    int m_sockfd;
 };
 
 class client_t {
