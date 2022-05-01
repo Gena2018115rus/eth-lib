@@ -146,4 +146,30 @@ class client_ref_t {
     int m_sockfd;
 };
 
+class client_t {
+  public:
+    client_t(const std::string &addr, const std::string &port);
+
+    // onNewData_t = void(std::string chunk);
+    template <typename onNewData_t>
+    void listen(onNewData_t onNewData) {
+        for (char in_buf[1024];;) {
+            ssize_t n = read(m_sockfd, in_buf, 1024);
+            if (n > 0) {
+                onNewData({in_buf, in_buf + n});
+            } else {
+                std::clog << "disconnected from server" << std::endl;
+                exit(0);
+            }
+        }
+    }
+
+    bool write(std::string buf);
+    ~client_t();
+
+  private:
+    std::string m_addr, m_port;
+    int m_sockfd;
+};
+
 #endif // #ifndef ETH_LIB

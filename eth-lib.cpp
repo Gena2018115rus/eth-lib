@@ -113,3 +113,50 @@ void listener_t::send_to_all(std::string message) {
         client_ref_t(*this, client_it->fd).write(message);
     }
 }
+
+client_t::client_t(const std::string &addr, const std::string &port) :
+  m_addr(addr),
+  m_port(port),
+  m_sockfd(socket(AF_INET, SOCK_STREAM, 0)) {
+    if (m_sockfd == -1)
+    {
+        std::cerr << "socket() error." << std::endl;
+        exit(-5);
+    }
+
+    struct addrinfo *servinfo;
+    const struct addrinfo hints = {
+        .ai_family = AF_INET,
+        .ai_socktype = SOCK_STREAM,
+    };
+
+    int r = getaddrinfo(m_addr.data(), m_port.data(), &hints, &servinfo);
+    if (r != 0)
+    {
+        std::cerr << "getaddrinfo() error " << r << '.' << std::endl;
+        exit(-1);
+    }
+    if (!servinfo)
+    {
+        std::cerr << "addrinfo list is empty." << std::endl;
+        exit(-2);
+    }
+
+    if (connect(m_sockfd, (struct sockaddr *)servinfo->ai_addr, sizeof(struct sockaddr_in)) != 0)
+    {
+        std::cerr << "connect() error." << std::endl;
+        exit(-6);
+    }
+
+    freeaddrinfo(servinfo);
+}
+
+bool client_t::write(std::string buf) {
+    client_t tmp(m_addr, m_port);
+    buf = "POST /message HTTP/1.1\r\nContent-Length: " + std::to_string(buf.size()) + "\r\n\r\n" + buf;
+    return ::write(tmp.m_sockfd, buf.data(), buf.size()) == buf.size();
+}
+
+client_t::~client_t() {
+    // close(m_sockfd);
+}
