@@ -55,7 +55,7 @@ listener_t::listener_t(unsigned short port) :
         exit(-4);
     }
 
-    m_sockfds.emplace_back(m_sockfd, POLLIN, 0);
+    m_sockfds.push_back({m_sockfd, POLLIN, 0});
 }
 
 listener_t::~listener_t() {

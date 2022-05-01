@@ -127,16 +127,15 @@ class listener_t {
                                     auto addr = client.addr();
                                     client.disconnect();
 
-                                    // auto s = client_in_bufs[client_fd];
-                                    // auto index = s.find("\r\n");
-                                    // bool flag = false;
-                                    // if (index != (size_t)-1) {
-                                    //     s = {s.begin(), s.begin() + index};
-                                    //     flag = s == "POST /message";
-                                    // }
+                                     auto index = input_buf.find("\r\n");
+                                     bool flag = false;
+                                     if (index != (size_t)-1) {
+                                         std::string s = {input_buf.begin(), input_buf.begin() + index};
+                                         flag = regex_search(s, std::regex{"^POST /message"});
+                                     }
 
-                                    // if (flag) {
-                                    if (input_buf.starts_with("POST /message")) { // clang on androin fails here and version above doesn't work on desktop?
+                                     if (flag) {
+//                                    if (input_buf.starts_with("POST /message")) { // clang on androin fails here and version above doesn't work on desktop?
                                         onNewMessage(addr, std::regex_replace(input_buf, std::regex{"[^]*?\r\n\r\n"}, "", std::regex_constants::format_first_only));
                                     } else {
                                         std::clog << input_buf << std::endl;
