@@ -1,2 +1,2 @@
-TODO: see https://github.com/Gena2018115rus/chat
+TODO: see https://github.com/Gena2018115rus/x-o
 
