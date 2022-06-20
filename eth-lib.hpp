@@ -138,9 +138,11 @@ class listener_t {
                                 c.write("\r\n");
                                 onNewClient(std::move(c));
 
+//                                std::cout << "chunk size = " << splitted.str(2).size() << "; " << headers;
                                 std::smatch m;
                                 if (regex_search(headers, m, std::regex{"Content-Length: (\\d+)\r\n"})
                                     && splitted.str(2).size() >= std::stoull(m[1])) {
+//                                    std::cout << "тело получено, отключаем клиента" << std::endl;
                                     client_ref_t client(*this, client_fd);
                                     auto addr = client.addr();
                                     client.disconnect();
@@ -196,15 +198,34 @@ class listener_t {
 
 class client_t {
   public:
-    client_t(const std::string &addr, const std::string &port);
+    client_t(const std::string &addr, const std::string &port, bool send_get = true);
 
     // onNewData_t = void(std::string chunk);
     template <typename onNewData_t>
     void run(onNewData_t onNewData) {
+        bool got_headers = false;
+        std::string buf;
         for (char in_buf[1024];;) {
             ssize_t n = read(m_sockfd, in_buf, 1024);
             if (n > 0) {
-                onNewData({in_buf, in_buf + n});
+                if (got_headers) {
+                    onNewData({in_buf, in_buf + n});
+                } else {
+                    buf += {in_buf, in_buf + n};
+                    std::smatch splitted;
+                    if (regex_match(buf, splitted, std::regex{"([^]*?\r\n)\r\n([^]*)"})) { // мб сильно сэкономит память если я буду не .str(2) делать, а только 1 захвал и .suffix()
+                        auto headers = splitted.str(1);
+                        std::smatch m;
+                        if (regex_search(headers, m, std::regex{"Set-Cookie: session2018115-id=(\\d+)\r\n"})) {
+                            m_uid = m[1];
+                        }
+                        if (!splitted.str(2).empty()) {
+                            onNewData(splitted.str(2));
+                        }
+                        got_headers = true;
+//                        std::cout << "хедеры получены" << std::endl;
+                    }
+                }
             } else {
                 std::clog << "disconnected from server" << std::endl;
                 exit(0);
@@ -216,7 +237,7 @@ class client_t {
     ~client_t();
 
   private:
-    std::string m_addr, m_port;
+    std::string m_addr, m_port, m_uid;
     int m_sockfd;
 };
 

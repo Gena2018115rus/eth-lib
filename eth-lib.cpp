@@ -118,7 +118,7 @@ void listener_t::send_to_all(std::string message) {
     }
 }
 
-client_t::client_t(const std::string &addr, const std::string &port) :
+client_t::client_t(const std::string &addr, const std::string &port, bool send_get) :
   m_addr(addr),
   m_port(port),
   m_sockfd(socket(AF_INET, SOCK_STREAM, 0)) {
@@ -153,14 +153,24 @@ client_t::client_t(const std::string &addr, const std::string &port) :
     }
 
     freeaddrinfo(servinfo);
+
+    if (send_get) {
+        std::string buf = "GET / HTTP/1.1\r\n\r\n";
+        if (::write(m_sockfd, buf.data(), buf.size()) != buf.size()) {
+            std::cerr << "unable to send GET" << std::endl;
+        }
+    }
 }
 
 bool client_t::write(std::string buf) {
-
-
-    client_t tmp(m_addr, m_port);
-    buf = "POST /message HTTP/1.1\r\nContent-Length: " + std::to_string(buf.size()) + "\r\n\r\n" + buf;
-    return ::write(tmp.m_sockfd, buf.data(), buf.size()) == buf.size();
+    client_t tmp(m_addr, m_port, false);
+    buf = "POST /message HTTP/1.1\r\nCookie: session2018115-id=" + m_uid + "\r\nContent-Length: " + std::to_string(buf.size()) + "\r\n\r\n" + buf;
+    if (::write(tmp.m_sockfd, buf.data(), buf.size()) != buf.size()) {
+        return false;
+    }
+//    tmp.run([](std::string chunk) {});
+//    std::cout << "тело отправлено" << std::endl;
+    return true;
 }
 
 client_t::~client_t() {
