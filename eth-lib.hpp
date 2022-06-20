@@ -12,6 +12,7 @@
 #include <string>
 #include <iostream>
 #include <regex>
+#include <chrono>
 
 class listener_t;
 
@@ -77,11 +78,9 @@ class listener_t {
                     m_client_addrs[client_sockfd] = {client_addr, client_addr_len};
     //                    send_to_all(addr_in_2str((struct sockaddr_in *)&client_addr) + " connected!");
 
-                    client_ref_t c(*this, client_sockfd);
-                    c.write("HTTP/1.1 200 OK\r\n\r\n"); // TODO: отправить клиенту addr()　　　мб сделать чтобы при первом подключении клиент получал уникальный идентификатор и дальше с помощью него мог восстанавливать долгий коннект   set-cookie
-                    onNewClient(std::move(c));
-
-                    m_sockfds.push_back({client_sockfd, POLLIN, 0}); // надо будет наверное операции с sockfds защитить мьютексами
+                    client_ref_t(*this, client_sockfd).write("HTTP/1.1 200 OK\r\n");
+                    
+                    m_sockfds.push_back({client_sockfd, POLLIN, 0}); // надо будет наверное операции с sockfds защитить мьютексами  хотя у eth-lib же всего один поток используется, не?
     //                    close(client_sockfd);
                 }
             }
@@ -122,6 +121,23 @@ class listener_t {
                             std::smatch splitted;
                             if (regex_match(input_buf, splitted, std::regex{"([^]*?\r\n)\r\n([^]*)"})) { // мб сильно сэкономит память если я буду не .str(2) делать, а только 1 захвал и .suffix()
                                 auto headers = splitted.str(1);
+                                std::string long_poll_addr;
+                                std::smatch uid;
+                                if (regex_search(headers, uid, std::regex{"Cookie: session2018115-id=(\\d+)\r\n"})) {
+                                    try {
+                                        long_poll_addr = client_ref_t(*this, m_uid2fd.at(uid[1])).addr();
+                                    } catch (const std::out_of_range &) {
+                                        goto set_cookie;
+                                    }
+                                } else set_cookie: {
+                                    std::string uid = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+                                    m_uid2fd[uid] = client_fd;
+                                    client_ref_t(*this, client_fd).write("Set-Cookie: session2018115-id=" + uid + "\r\n");
+                                }
+                                client_ref_t c(*this, client_fd);
+                                c.write("\r\n");
+                                onNewClient(std::move(c));
+
                                 std::smatch m;
                                 if (regex_search(headers, m, std::regex{"Content-Length: (\\d+)\r\n"})
                                     && splitted.str(2).size() >= std::stoull(m[1])) {
@@ -138,7 +154,7 @@ class listener_t {
 
                                      if (flag) {
 //                                    if (input_buf.starts_with("POST /message")) { // clang on androin fails here and version above doesn't work on desktop?
-                                        onNewMessage(addr, std::regex_replace(input_buf, std::regex{"[^]*?\r\n\r\n"}, "", std::regex_constants::format_first_only));
+                                        onNewMessage(long_poll_addr.empty() ? addr : long_poll_addr, std::regex_replace(input_buf, std::regex{"[^]*?\r\n\r\n"}, "", std::regex_constants::format_first_only));
                                     } else {
                                         std::clog << input_buf << std::endl;
                                     }
@@ -168,6 +184,7 @@ class listener_t {
 //    std::mutex sockfds_mtx;
     std::vector<pollfd> m_sockfds;
     std::map<int, client_addr_t> m_client_addrs; // client_addrs[fd].len is unused?     sorted_map избыточен?
+    std::map<std::string, int> m_uid2fd;
     std::unordered_map<int, std::string> m_client_in_bufs;
     void (*onDisconnect)(std::string);
     bool m_must_break;
