@@ -49,9 +49,9 @@ listener_t::listener_t(unsigned short port) :
 
     freeaddrinfo(servinfo);
 
-    if (listen(m_sockfd, 10000) != 0)
+    if (::listen(m_sockfd, 10000) != 0)
     {
-        std::cerr << "listen() error." << std::endl;
+        std::cerr << "::listen() error." << std::endl;
         exit(-4);
     }
 
@@ -90,12 +90,16 @@ const std::string &client_ref_t::input_buf() {
 }
 
 void listener_t::disconnect(int client_fd) {
+    std::string addr = client_ref_t(*this, client_fd).addr();
+
     // т.к. инвалидируются итераторы, после этого вызова нельзя продолжать итерации, т.е. нужен break
     m_sockfds.erase(std::find_if(m_sockfds.begin(), m_sockfds.end(), [client_fd](auto pollfd) { return pollfd.fd == client_fd; })); // инвалидируются итераторы!
 //                    send_to_all(addr_in_2str((struct sockaddr_in *)&client_addrs[fd].data) + " disconnected!");
     m_client_addrs.erase(client_fd);
     m_client_in_bufs.erase(client_fd);
     m_must_break = true;
+
+    onDisconnect(addr);
 }
 
 void client_ref_t::disconnect() {
@@ -152,6 +156,8 @@ client_t::client_t(const std::string &addr, const std::string &port) :
 }
 
 bool client_t::write(std::string buf) {
+
+
     client_t tmp(m_addr, m_port);
     buf = "POST /message HTTP/1.1\r\nContent-Length: " + std::to_string(buf.size()) + "\r\n\r\n" + buf;
     return ::write(tmp.m_sockfd, buf.data(), buf.size()) == buf.size();

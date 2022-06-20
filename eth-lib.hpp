@@ -40,8 +40,10 @@ class listener_t {
     
     // onNewClient_t  = void(client_ref_t client);
     // onNewMessage_t = void(std::string addr, std::string msg);
+    // onDisconnect_t = void(std::string addr);
     template <typename onNewClient_t, typename onNewMessage_t>
-    void run(onNewClient_t onNewClient, onNewMessage_t onNewMessage) {
+    void listen(onNewClient_t onNewClient, onNewMessage_t onNewMessage, void (*onDisconnect)(std::string)) {
+        this->onDisconnect = onDisconnect;
         for (;;)
         {
             for (auto& sockfd : m_sockfds) sockfd.revents = 0; // need?
@@ -76,7 +78,7 @@ class listener_t {
     //                    send_to_all(addr_in_2str((struct sockaddr_in *)&client_addr) + " connected!");
 
                     client_ref_t c(*this, client_sockfd);
-                    c.write("HTTP/1.1 200 OK\r\n\r\n");
+                    c.write("HTTP/1.1 200 OK\r\n\r\n"); // TODO: отправить клиенту addr()　　　мб сделать чтобы при первом подключении клиент получал уникальный идентификатор и дальше с помощью него мог восстанавливать долгий коннект   set-cookie
                     onNewClient(std::move(c));
 
                     m_sockfds.push_back({client_sockfd, POLLIN, 0}); // надо будет наверное операции с sockfds защитить мьютексами
@@ -167,6 +169,7 @@ class listener_t {
     std::vector<pollfd> m_sockfds;
     std::map<int, client_addr_t> m_client_addrs; // client_addrs[fd].len is unused?     sorted_map избыточен?
     std::unordered_map<int, std::string> m_client_in_bufs;
+    void (*onDisconnect)(std::string);
     bool m_must_break;
     
     friend client_ref_t;
@@ -180,7 +183,7 @@ class client_t {
 
     // onNewData_t = void(std::string chunk);
     template <typename onNewData_t>
-    void listen(onNewData_t onNewData) {
+    void run(onNewData_t onNewData) {
         for (char in_buf[1024];;) {
             ssize_t n = read(m_sockfd, in_buf, 1024);
             if (n > 0) {
