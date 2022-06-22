@@ -30,7 +30,7 @@ class client_ref_t {
     void disconnect();
     std::string addr();
 
-  private:
+//  private:
     listener_t &m_listener;
     int m_sockfd;
 };
